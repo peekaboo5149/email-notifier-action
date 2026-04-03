@@ -1,15 +1,5 @@
 name: 'Email Notifier Action'
-description: |-
-  A GitHub Action for sending email notifications with HTML template support via SMTP.
-
-  Required Secrets:
-    - MAILER_SEND_FROM: Email address to send from
-    - MAILER_SEND_TO: Email address(es) to send to (comma-separated for multiple)
-    - SMTP_HOST: SMTP server hostname (e.g., smtp.gmail.com)
-    - SMTP_PORT: SMTP server port (e.g., 587 for TLS, 465 for SSL)
-    - SMTP_USER: SMTP authentication username
-    - SMTP_PASS: SMTP authentication password
-    - SMTP_SECURE: Use SSL (true for port 465, false for port 587)
+description: 'Send email notifications via SMTP with HTML template support and variable substitution'
 author: 'Tanmay Kumar'
 inputs:
   subject:
