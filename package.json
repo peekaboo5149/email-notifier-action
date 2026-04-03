@@ -1,6 +1,6 @@
 {
   "name": "email-notifier-action",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A GitHub Action for email notifications",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
