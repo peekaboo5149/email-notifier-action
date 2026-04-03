@@ -1,0 +1,199 @@
+name: Marketplace Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate action.yml
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const yaml = require('yaml');
+
+            // Read action.yml
+            const actionContent = fs.readFileSync('action.yml', 'utf8');
+            const action = yaml.parse(actionContent);
+
+            // Validation checks
+            const errors = [];
+            const warnings = [];
+
+            // Check required fields
+            if (!action.name) errors.push('Missing required field: name');
+            if (!action.description) errors.push('Missing required field: description');
+            if (!action.runs) errors.push('Missing required field: runs');
+            if (!action.runs?.using) errors.push('Missing required field: runs.using');
+            if (!action.runs?.main) errors.push('Missing required field: runs.main');
+
+            // Check name requirements
+            if (action.name) {
+              // Name must be unique (we can't check this automatically)
+              // Name can't match user/org (we can't check this automatically)
+              
+              // Check against GitHub features
+              const reservedNames = [
+                'github', 'actions', 'marketplace', 'security', 'insights',
+                'settings', 'pulls', 'issues', 'codespaces', 'copilot',
+                'projects', 'discussions', 'actions', 'wiki', 'commits',
+                'branches', 'releases', 'tags', 'environments', 'packages'
+              ];
+              
+              const lowerName = action.name.toLowerCase();
+              if (reservedNames.includes(lowerName)) {
+                errors.push(`Action name "${action.name}" matches a reserved GitHub feature`);
+              }
+              
+              // Check against Marketplace categories
+              const reservedCategories = [
+                'api-management', 'chat', 'code-quality', 'code-review',
+                'continuous-integration', 'dependency-management', 'deployment',
+                'ide', 'learning', 'localization', 'mobile', 'monitoring',
+                'project-management', 'publishing', 'security', 'support',
+                'testing', 'utilities'
+              ];
+              
+              if (reservedCategories.includes(lowerName)) {
+                errors.push(`Action name "${action.name}" matches a GitHub Marketplace category`);
+              }
+            }
+
+            // Check description length (recommended: 125 chars or less for marketplace)
+            if (action.description && action.description.length > 125) {
+              warnings.push(`Description is ${action.description.length} characters (recommended: 125 or less for marketplace display)`);
+            }
+
+            // Check branding
+            if (!action.branding) {
+              warnings.push('Missing branding section (recommended for marketplace)');
+            } else {
+              const validIcons = [
+                'activity', 'airplay', 'alert-circle', 'alert-octagon', 'alert-triangle',
+                'align-center', 'align-justify', 'align-left', 'align-right', 'anchor',
+                'aperture', 'archive', 'arrow-down', 'arrow-left', 'arrow-right',
+                'arrow-up', 'at-sign', 'award', 'bar-chart', 'bar-chart-2',
+                'battery', 'battery-charging', 'bell', 'bell-off', 'bluetooth',
+                'bold', 'book', 'book-open', 'bookmark', 'box', 'briefcase',
+                'calendar', 'camera', 'camera-off', 'cast', 'check', 'check-circle',
+                'check-square', 'chevron-down', 'chevron-left', 'chevron-right',
+                'chevron-up', 'chrome', 'circle', 'clipboard', 'clock', 'cloud',
+                'cloud-drizzle', 'cloud-lightning', 'cloud-off', 'cloud-rain',
+                'cloud-snow', 'code', 'codepen', 'codesandbox', 'coffee', 'columns',
+                'command', 'compass', 'copy', 'corner-down-left', 'corner-down-right',
+                'corner-left-down', 'corner-left-up', 'corner-right-down',
+                'corner-right-up', 'corner-up-left', 'corner-up-right', 'cpu',
+                'credit-card', 'crop', 'crosshair', 'database', 'delete', 'disc',
+                'dollar-sign', 'download', 'download-cloud', 'droplet', 'edit',
+                'edit-2', 'edit-3', 'external-link', 'eye', 'eye-off', 'facebook',
+                'fast-forward', 'feather', 'figma', 'file', 'file-minus',
+                'file-plus', 'file-text', 'film', 'filter', 'flag', 'folder',
+                'folder-minus', 'folder-plus', 'framer', 'frown', 'gift', 'git-branch',
+                'git-commit', 'git-merge', 'git-pull-request', 'github', 'gitlab',
+                'globe', 'grid', 'hard-drive', 'hash', 'headphones', 'heart',
+                'help-circle', 'hexagon', 'home', 'image', 'inbox', 'info',
+                'instagram', 'italic', 'key', 'layers', 'layout', 'life-buoy',
+                'link', 'link-2', 'linkedin', 'list', 'loader', 'lock', 'log-in',
+                'log-out', 'mail', 'map', 'map-pin', 'maximize', 'maximize-2',
+                'meh', 'menu', 'message-circle', 'message-square', 'mic',
+                'mic-off', 'minimize', 'minimize-2', 'minus', 'minus-circle',
+                'minus-square', 'monitor', 'moon', 'more-horizontal', 'more-vertical',
+                'mouse-pointer', 'move', 'music', 'navigation', 'navigation-2',
+                'octagon', 'package', 'paperclip', 'pause', 'pause-circle', 'pen-tool',
+                'percent', 'phone', 'phone-call', 'phone-forwarded', 'phone-incoming',
+                'phone-missed', 'phone-off', 'phone-outgoing', 'pie-chart', 'play',
+                'play-circle', 'plus', 'plus-circle', 'plus-square', 'pocket',
+                'power', 'printer', 'radio', 'refresh-ccw', 'refresh-cw', 'repeat',
+                'rewind', 'rotate-ccw', 'rotate-cw', 'rss', 'save', 'scissors',
+                'search', 'send', 'server', 'settings', 'share', 'share-2',
+                'shield', 'shield-off', 'shopping-bag', 'shopping-cart', 'shuffle',
+                'sidebar', 'skip-back', 'skip-forward', 'slack', 'slash', 'sliders',
+                'smartphone', 'smile', 'speaker', 'square', 'star', 'stop-circle',
+                'sun', 'sunrise', 'sunset', 'tablet', 'tag', 'target', 'terminal',
+                'thermometer', 'thumbs-down', 'thumbs-up', 'toggle-left', 'toggle-right',
+                'tool', 'trash', 'trash-2', 'trello', 'trending-down', 'trending-up',
+                'triangle', 'truck', 'tv', 'twitch', 'twitter', 'type', 'umbrella',
+                'underline', 'unlock', 'upload', 'upload-cloud', 'user', 'user-check',
+                'user-minus', 'user-plus', 'user-x', 'users', 'video', 'video-off',
+                'voicemail', 'volume', 'volume-1', 'volume-2', 'volume-x', 'watch',
+                'wifi', 'wifi-off', 'wind', 'x', 'x-circle', 'x-octagon', 'x-square',
+                'youtube', 'zap', 'zap-off', 'zoom-in', 'zoom-out'
+              ];
+              
+              const validColors = ['white', 'yellow', 'blue', 'green', 'orange', 'red', 'purple', 'gray-dark'];
+              
+              if (action.branding.icon && !validIcons.includes(action.branding.icon)) {
+                warnings.push(`Icon "${action.branding.icon}" may not be valid. Check GitHub documentation for valid icons.`);
+              }
+              
+              if (action.branding.color && !validColors.includes(action.branding.color)) {
+                warnings.push(`Color "${action.branding.color}" may not be valid. Valid colors: ${validColors.join(', ')}`);
+              }
+            }
+
+            // Check inputs
+            if (action.inputs) {
+              for (const [key, input] of Object.entries(action.inputs)) {
+                if (!input.description) {
+                  errors.push(`Input "${key}" is missing description`);
+                }
+              }
+            }
+
+            // Report results
+            console.log('=== Marketplace Validation Results ===\n');
+
+            if (errors.length === 0 && warnings.length === 0) {
+              console.log('✅ All validation checks passed!');
+            } else {
+              if (errors.length > 0) {
+                console.log('❌ Errors:');
+                errors.forEach(e => console.log(`  - ${e}`));
+                console.log('');
+              }
+              
+              if (warnings.length > 0) {
+                console.log('⚠️ Warnings:');
+                warnings.forEach(w => console.log(`  - ${w}`));
+                console.log('');
+              }
+            }
+
+            if (errors.length > 0) {
+              core.setFailed(`Validation failed with ${errors.length} error(s)`);
+            }
+
+      - name: Check dist is committed
+        run: |
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ dist/index.js not found. Run 'pnpm run package' and commit the dist folder."
+            exit 1
+          fi
+          echo "✅ dist/index.js exists"
+
+      - name: Check action.yml in root
+        run: |
+          if [ ! -f "action.yml" ]; then
+            echo "❌ action.yml must be in the root directory"
+            exit 1
+          fi
+          echo "✅ action.yml exists in root"
+
+      - name: Summary
+        run: |
+          echo "### Marketplace Readiness Check ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This action appears ready for GitHub Marketplace publication." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Ensure the repository is public" >> $GITHUB_STEP_SUMMARY
+          echo "2. Create a release using the Release workflow" >> $GITHUB_STEP_SUMMARY
+          echo "3. On the release page, check 'Publish this Action to the GitHub Marketplace'" >> $GITHUB_STEP_SUMMARY
+          echo "4. Complete the marketplace listing requirements" >> $GITHUB_STEP_SUMMARY

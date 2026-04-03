@@ -1,0 +1,211 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release
+      - beta
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  pull-requests: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run CI checks
+        run: pnpm run ci
+
+      - name: Package for distribution
+        run: pnpm run package
+
+      - name: Commit dist changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          if git diff --cached --quiet; then
+            echo "No changes to dist/"
+          else
+            git commit -m "chore: update dist for release"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: Get version bump type from commits
+        id: bump_type
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tag found, starting from v0.0.0"
+            COMMITS=$(git log --pretty=format:"%s" --no-merges)
+          else
+            echo "Last tag: $LAST_TAG"
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+          fi
+
+          BUMP_TYPE="patch"
+
+          while IFS= read -r commit; do
+            if echo "$commit" | grep -qE "^[a-z]+(\(.+\))?!:"; then
+              echo "Found breaking change: $commit"
+              BUMP_TYPE="major"
+              break
+            elif echo "$commit" | grep -qE "^feat(\(.+\))?:"; then
+              if [ "$BUMP_TYPE" != "major" ]; then
+                echo "Found feature: $commit"
+                BUMP_TYPE="minor"
+              fi
+            elif echo "$commit" | grep -qE "^fix(\(.+\))?:"; then
+              echo "Found fix: $commit"
+            fi
+          done <<< "$COMMITS"
+
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Detected bump type: $BUMP_TYPE"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          # Get last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+
+          # Parse version
+          VERSION=${LAST_TAG#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          BUMP_TYPE=${{ steps.bump_type.outputs.bump_type }}
+          BRANCH=${{ github.ref_name }}
+
+          if [ "$BRANCH" == "beta" ]; then
+            # Beta releases: bump patch and add -beta.N
+            PATCH=$((PATCH + 1))
+            
+            # Count existing beta tags for this version
+            BETA_COUNT=$(git tag -l "v${MAJOR}.${MINOR}.${PATCH}-beta*" | wc -l)
+            BETA_NUM=$((BETA_COUNT + 1))
+            
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-beta.${BETA_NUM}"
+            IS_PRERELEASE="true"
+          else
+            # Release branch: standard semver bump
+            case $BUMP_TYPE in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            IS_PRERELEASE="false"
+          fi
+
+          echo "new_version=v${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "major=v${MAJOR}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
+          echo "New version: v${NEW_VERSION}"
+
+      - name: Update package.json version
+        run: |
+          NEW_VERSION=${{ steps.version.outputs.new_version }}
+          # Remove 'v' prefix for package.json
+          PKG_VERSION=${NEW_VERSION#v}
+
+          # Update package.json
+          jq --arg version "$PKG_VERSION" '.version = $version' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          git add package.json
+          git commit -m "chore(release): ${NEW_VERSION} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_version }}
+          name: Release ${{ steps.version.outputs.new_version }}
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
+          generate_release_notes: true
+          files: |
+            dist/index.js
+            dist/index.js.map
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: dist/index.js
+          subject-digest: sha256:${{ hashFiles('dist/index.js') }}
+
+      - name: Update major version tag (release only)
+        if: github.ref_name == 'release' && steps.version.outputs.is_prerelease == 'false'
+        run: |
+          MAJOR=${{ steps.version.outputs.major }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa "$MAJOR" -m "Update $MAJOR tag to ${{ steps.version.outputs.new_version }}"
+          git push origin "$MAJOR" --force
+
+      - name: Update beta tag (beta only)
+        if: github.ref_name == 'beta'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa "beta" -m "Update beta tag to ${{ steps.version.outputs.new_version }}"
+          git push origin "beta" --force
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commits analyzed for version bump:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Breaking changes (!): major bump" >> $GITHUB_STEP_SUMMARY
+          echo "- Features (feat): minor bump" >> $GITHUB_STEP_SUMMARY
+          echo "- Fixes (fix): patch bump" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags updated:**" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref_name }}" == "release" ]; then
+            echo "- ${{ steps.version.outputs.major }} (floating major tag)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- beta (floating beta tag)" >> $GITHUB_STEP_SUMMARY
+          fi

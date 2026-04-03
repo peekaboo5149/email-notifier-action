@@ -1,0 +1,74 @@
+name: 'Email Notifier Action'
+description: |-
+  A GitHub Action for sending email notifications with HTML template support via SMTP.
+
+  Required Secrets:
+    - MAILER_SEND_FROM: Email address to send from
+    - MAILER_SEND_TO: Email address(es) to send to (comma-separated for multiple)
+    - SMTP_HOST: SMTP server hostname (e.g., smtp.gmail.com)
+    - SMTP_PORT: SMTP server port (e.g., 587 for TLS, 465 for SSL)
+    - SMTP_USER: SMTP authentication username
+    - SMTP_PASS: SMTP authentication password
+    - SMTP_SECURE: Use SSL (true for port 465, false for port 587)
+author: 'Tanmay Kumar'
+inputs:
+  subject:
+    description: 'Email subject line'
+    required: true
+    default: 'Notification from GitHub Actions'
+  template:
+    description: |-
+      HTML template content as a string (use | for multi-line).
+      Variables: {{variableName}}
+      CSS is supported within style tags or inline.
+      Example:
+        <html>
+          <body>
+            <h1>Hello {{name}}</h1>
+            <p>Build {{buildNumber}} completed!</p>
+          </body>
+        </html>
+    required: false
+  template-path:
+    description: |-
+      Path to HTML template file (relative to .github directory).
+      Must be inside .github folder. Default folder: mail-templates/
+      Examples: mail-templates/build-notification.html
+                templates/mail/deploy-success.html
+    required: false
+  template-folder:
+    description: 'Default folder for templates inside .github (default: mail-templates)'
+    required: false
+    default: 'mail-templates'
+  template-variables:
+    description: |-
+      JSON object with template variables.
+      Example: {"name": "John", "buildNumber": "42", "status": "success"}
+    required: false
+    default: '{}'
+  dry-run:
+    description: 'Run in dry-run mode (no actual emails sent)'
+    required: false
+    default: 'false'
+
+outputs:
+  status:
+    description: 'Status of the notification (success, dry-run, or failed)'
+  timestamp:
+    description: 'Timestamp when the notification was sent'
+  rendered-template:
+    description: 'The final rendered HTML template with variables replaced (dry-run only)'
+  from:
+    description: 'Sender email address (from secrets)'
+  to:
+    description: 'Recipient email address(es) (from secrets)'
+  message-id:
+    description: 'SMTP message ID of the sent email (if successful)'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'mail'
+  color: 'blue'
