@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,8 +45,7 @@ jobs:
 
       - name: Check dist is up to date
         run: |
-          pnpm run package
           if [ -n "$(git status --porcelain dist)" ]; then
-            echo "::error::dist/ is out of date. Run 'pnpm run package' and commit the changes."
+            echo "::error::dist/ is out of date. Run 'pnpm run build' and commit the changes."
             exit 1
           fi
